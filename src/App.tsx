@@ -1,26 +1,55 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Home from "./pages/Home";
+import BuyInsurance from "./pages/BuyInsurance";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ProtectedRoute from "./components/ProtectRoute"; 
+import AdminDashboard from "./pages/admin/dashboard";
+import AdminPolicy from "./pages/admin/policy";
 
-function App() {
+const App: React.FC = () => {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <Routes>
+       {/* Public Routes */}
+       <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* User Protected Routes */}
+        <Route 
+          path="/buy-insurance" 
+          element={
+            <ProtectedRoute role="POLICY_HOLDER_ROLE">
+              <BuyInsurance />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Admin Protected Routes */}
+        <Route 
+          path="/admin" 
+          element={
+            <ProtectedRoute role="ADMIN_ROLE">
+              <AdminDashboard />
+              <AdminPolicy />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/admin-policy" 
+          element={
+            <ProtectedRoute role="ADMIN_ROLE">
+              <AdminPolicy />
+            </ProtectedRoute>
+          } 
+        />
+
+
+      </Routes>
+    </Router>
   );
-}
+};
 
 export default App;
