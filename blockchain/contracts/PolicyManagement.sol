@@ -19,15 +19,17 @@ contract PolicyManagement {
         string[] cover;         
     }
 
-    struct UserPolicySelection {
+     struct UserPolicySelection {
         uint256 policyID;
         uint256 premiumPriceETH; 
+        uint256 nextDueDate; // Next payment due date (UNIX timestamp)
     }
 
     mapping(uint256 => Policy) public policies;
     mapping(address => UserPolicySelection[]) internal userPolicies;
 
-    uint256 public policyCount;               
+    uint256 public policyCount;
+    address public premiumCollectionAddress;              
 
     event PolicyCreated(
         uint256 policyID,
@@ -43,8 +45,12 @@ contract PolicyManagement {
     event PolicySelected(
         address indexed user, 
         uint256 policyID, 
-        uint256 premiumPriceETH
+        uint256 premiumPriceETH, 
+        uint256 nextDueDate
     );
+
+   
+
 
     // Modifier for admin access control
     modifier onlyAdmin() {
@@ -63,7 +69,11 @@ contract PolicyManagement {
         priceFeed = new MockV3Aggregator(8, _initialPrice); // 8 decimal places for USD/ETH
     }
 
-    /*
+     function setPremiumCollectionAddress(address _premiumCollectionAddress) external onlyAdmin {
+        premiumCollectionAddress = _premiumCollectionAddress;
+    }
+
+    /**
      * @dev Admin creates a new policy. 
      */
     function createPolicy(
@@ -97,7 +107,27 @@ contract PolicyManagement {
         );
     }
 
-    /*
+    function selectPolicy(address user, uint256 _policyID, uint256 _premiumInUSD) external {
+        require(_policyID > 0 && _policyID <= policyCount, "Policy does not exist");
+
+        uint256 premiumInETH = getUSDToETH(_premiumInUSD);
+        uint256 nextDueDate = block.timestamp + 365 days;
+
+        userPolicies[user].push(UserPolicySelection(_policyID, premiumInETH, nextDueDate));
+
+        emit PolicySelected(user, _policyID, premiumInETH, nextDueDate);
+    }
+
+    function getUSDToETH(uint256 amountInUSD) public view returns (uint256) {
+    (, int256 price, , ,) = priceFeed.latestRoundData();
+    require(price > 0, "Invalid price feed");
+    uint256 ethPrice = uint256(price); 
+    uint256 amountInWei = (amountInUSD * 1e18) / ethPrice; 
+    return amountInWei; // Keep it in Wei for accuracy and payment logic
+}
+
+
+    /**
      * @dev View details of a specific policy.
      */
     function viewPolicy(uint256 _policyID) external view returns (
@@ -124,7 +154,7 @@ contract PolicyManagement {
         );
     }
 
-    /*
+    /**
      * @dev View all policies that exist in the contract.
      */
     function viewAllPolicies() external view returns (Policy[] memory) {
@@ -135,55 +165,28 @@ contract PolicyManagement {
         return allPolicies;
     }
 
-    /*
-     * @dev Allows users to select a policy and store the policyID with the premium price in ETH.
-     */
-    function selectPolicy(uint256 _policyID, uint256 _premiumInUSD) external payable onlyUser {
-        require(_policyID > 0 && _policyID <= policyCount, "Policy does not exist");
-
-        // Convert USD premium to ETH using Chainlink price feed
-        uint256 premiumInETH = getUSDToETH(_premiumInUSD);
-
-        userPolicies[msg.sender].push(UserPolicySelection(_policyID, premiumInETH));
-
-        emit PolicySelected(msg.sender, _policyID, premiumInETH);
-    }
-
-    /*
-     * @dev Converts USD to ETH using the Chainlink price feed.
-     */
-    function getUSDToETH(uint256 amountInUSD) public view returns (uint256) {
-        (, int256 price, , ,) = priceFeed.latestRoundData();
-        require(price > 0, "Invalid price feed");
-        uint256 ethPrice = uint256(price); // Scale Chainlink price from 8 decimals to 18 decimals
-        uint256 amountInWei = (amountInUSD * 1e18) / ethPrice; // convert to 18 decimal ETH
-
-
-        return amountInWei;
-    }
-
-    /*
+    /**
      * @dev View all selected policies for a specific user along with the premium price in ETH.
      */
-    function getUserSelectedPolicies(address _user) external view returns (
+     function getUserSelectedPolicies(address _user) external view returns (
         uint256[] memory policyIDs,
         uint256[] memory premiumPricesETH,
-        Policy[] memory policyDetails
+        uint256[] memory dueDates
     ) {
         uint256 totalPolicies = userPolicies[_user].length;
         require(totalPolicies > 0, "User has not selected any policies");
 
         uint256[] memory policyIDArray = new uint256[](totalPolicies);
         uint256[] memory premiumPriceArray = new uint256[](totalPolicies);
-        Policy[] memory policyDetailsArray = new Policy[](totalPolicies);
+        uint256[] memory dueDatesArray = new uint256[](totalPolicies);
 
         for (uint256 i = 0; i < totalPolicies; i++) {
             UserPolicySelection storage userSelection = userPolicies[_user][i];
             policyIDArray[i] = userSelection.policyID;
             premiumPriceArray[i] = userSelection.premiumPriceETH;
-            policyDetailsArray[i] = policies[userSelection.policyID];
+            dueDatesArray[i] = userSelection.nextDueDate;
         }
 
-        return (policyIDArray, premiumPriceArray, policyDetailsArray);
+        return (policyIDArray, premiumPriceArray, dueDatesArray);
     }
 }
